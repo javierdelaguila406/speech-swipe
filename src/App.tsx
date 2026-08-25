@@ -583,12 +583,13 @@ const App: React.FC = () => {
       </header>
 
       <div style={{
+        flex: 1,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '40px 20px',
-        minHeight: 'calc(100vh - 300px)'
+        overflowY: 'auto'
       }}>
         <div style={{
           width: '100%',
