@@ -1,325 +1,988 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { LoginScreen } from '@/components/auth/LoginScreen'
-import { useAuth } from '@/hooks/useAuth'
-import { usePhraseStore } from '@/store/phraseStore'
+import { MODULES, Module, ModulePhrase } from '@/config/modules'
 
-const PHRASE_IMAGES = [
-  'https://images.pexels.com/photos/3807517/pexels-photo-3807517.jpeg?w=500&h=500&fit=crop',
-  'https://images.pexels.com/photos/3771919/pexels-photo-3771919.jpeg?w=500&h=500&fit=crop',
-  'https://images.pexels.com/photos/3807514/pexels-photo-3807514.jpeg?w=500&h=500&fit=crop',
-  'https://images.pexels.com/photos/3807513/pexels-photo-3807513.jpeg?w=500&h=500&fit=crop',
-  'https://images.pexels.com/photos/5632399/pexels-photo-5632399.jpeg?w=500&h=500&fit=crop',
-  'https://images.pexels.com/photos/5632398/pexels-photo-5632398.jpeg?w=500&h=500&fit=crop',
-  'https://images.pexels.com/photos/5632400/pexels-photo-5632400.jpeg?w=500&h=500&fit=crop',
-  'https://images.pexels.com/photos/5632401/pexels-photo-5632401.jpeg?w=500&h=500&fit=crop',
-  'https://images.pexels.com/photos/3807516/pexels-photo-3807516.jpeg?w=500&h=500&fit=crop',
-  'https://images.pexels.com/photos/3807512/pexels-photo-3807512.jpeg?w=500&h=500&fit=crop'
-]
+const generateCaregiverPassword = () => Math.random().toString(36).slice(-8).toUpperCase()
 
-function App() {
-  const { user, loading, logout } = useAuth()
-  const { initializePhrases, getCurrentPhrase, nextPhrase, previousPhrase, toggleFavorite, updatePracticeStats, getStats, phrases } = usePhraseStore()
-  const [showPractice, setShowPractice] = useState(false)
-  const [showLips, setShowLips] = useState(false)
-  const [transcript, setTranscript] = useState('')
-  const [score, setScore] = useState<number | null>(null)
-  const [isListening, setIsListening] = useState(false)
-  const [isCaregiverMode, setIsCaregiverMode] = useState(false)
-  const [showAddPhrase, setShowAddPhrase] = useState(false)
-  const [newPhrase, setNewPhrase] = useState('')
-  const [newCategory, setNewCategory] = useState('Saludos')
-  const touchStartY = useRef(0)
+const RealisticLipsModal: React.FC<{
+  phrase: ModulePhrase
+  onClose: () => void
+  isSpeaking: boolean
+}> = ({ phrase, onClose, isSpeaking }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    const users = JSON.parse(localStorage.getItem('speech_swipe_users') || '[]')
+    if (!canvasRef.current) return
+    const ctx = canvasRef.current.getContext('2d')!
+    ctx.fillStyle = '#FDB4D9'
+    ctx.clearRect(0, 0, 200, 150)
+    ctx.fillRect(10, 60, 180, 40)
+
+    if (isSpeaking) {
+      const animate = () => {
+        const width = 30 + Math.sin(Date.now() / 100) * 20
+        ctx.fillStyle = '#FDB4D9'
+        ctx.clearRect(0, 0, 200, 150)
+        ctx.fillRect(10, 60, 180, 40)
+        ctx.fillStyle = '#EC4668'
+        ctx.fillRect(50, 70, width, 15)
+        ctx.fillRect(50, 90, width, 15)
+        requestAnimationFrame(animate)
+      }
+      animate()
+    } else {
+      ctx.fillStyle = '#EC4668'
+      ctx.fillRect(50, 70, 30, 15)
+      ctx.fillRect(50, 90, 30, 15)
+    }
+  }, [isSpeaking])
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 40,
+      padding: '20px'
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        padding: '40px',
+        textAlign: 'center',
+        maxWidth: '400px',
+        width: '100%'
+      }}>
+        <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>👄 Labios</h2>
+        <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '24px' }}>{phrase.text}</p>
+        <canvas
+          ref={canvasRef}
+          style={{
+            width: '200px',
+            height: '150px',
+            border: '2px solid #e5e7eb',
+            borderRadius: '8px',
+            margin: '0 auto 24px'
+          }}
+        />
+        <button
+          onClick={onClose}
+          style={{
+            width: '100%',
+            padding: '12px',
+            backgroundColor: '#10b981',
+            color: 'white',
+            fontWeight: '600',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '16px'
+          }}
+        >
+          Cerrar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+interface User {
+  id: string
+  email: string
+  password: string
+  fullName: string
+  role: 'user' | 'caregiver'
+  linkedCaregiverId?: string
+  linkedPatientIds?: string[]
+}
+
+interface UserState {
+  id: string
+  email: string
+  fullName: string
+  role: 'user' | 'caregiver'
+  linkedCaregiverId?: string
+}
+
+const App: React.FC = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [currentUser, setCurrentUser] = useState<UserState | null>(null)
+  const [currentModuleIndex, setCurrentModuleIndex] = useState(0)
+  const [currentPhraseIndex, setCurrentPhraseIndex] = useState(0)
+  const [showLipsModal, setShowLipsModal] = useState(false)
+  const [showPracticeModal, setShowPracticeModal] = useState(false)
+  const [practiceScore, setPracticeScore] = useState<number | null>(null)
+  const [transcript, setTranscript] = useState('')
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [showAddPhraseForm, setShowAddPhraseForm] = useState(false)
+  const [newPhraseText, setNewPhraseText] = useState('')
+  const [modules, setModules] = useState<Module[]>(MODULES)
+  const [patients, setPatients] = useState<UserState[]>([])
+  const [showStats, setShowStats] = useState(false)
+  const recognitionRef = useRef<any>(null)
+
+  useEffect(() => {
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (Recognition) {
+      recognitionRef.current = new Recognition()
+      recognitionRef.current.continuous = false
+      recognitionRef.current.lang = 'es-ES'
+    }
+
+    const users = JSON.parse(localStorage.getItem('speech_swipe_users') || '[]') as User[]
     if (users.length === 0) {
-      localStorage.setItem('speech_swipe_users', JSON.stringify([
-        { id: '1', email: 'user@test.com', password: 'password', fullName: 'Usuario Demo', role: 'user' },
-        { id: '2', email: 'caregiver@test.com', password: 'password', fullName: 'Cuidador Demo', role: 'caregiver' }
-      ]))
+      const demoUsers = [
+        {
+          id: '1',
+          email: 'user@test.com',
+          password: 'password',
+          fullName: 'Usuario Demo',
+          role: 'user' as const,
+          linkedCaregiverId: '2'
+        },
+        {
+          id: '2',
+          email: 'caregiver@test.com',
+          password: 'password',
+          fullName: 'Cuidador Demo',
+          role: 'caregiver' as const,
+          linkedPatientIds: ['1']
+        }
+      ]
+      localStorage.setItem('speech_swipe_users', JSON.stringify(demoUsers))
     }
-    initializePhrases()
-  }, [initializePhrases])
+  }, [])
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY
+  const handleLoginSuccess = () => {
+    const users = JSON.parse(localStorage.getItem('speech_swipe_users') || '[]') as User[]
+    const emailInput = document.querySelector('input[type="email"]') as HTMLInputElement
+    const passwordInput = document.querySelector('input[type="password"]') as HTMLInputElement
+
+    if (emailInput && passwordInput) {
+      const user = users.find(u => u.email === emailInput.value && u.password === passwordInput.value)
+      if (user) {
+        setCurrentUser({
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          role: user.role,
+          linkedCaregiverId: user.linkedCaregiverId
+        })
+
+        if (user.role === 'caregiver' && user.linkedPatientIds) {
+          const linkedPatients = users.filter(u => user.linkedPatientIds!.includes(u.id))
+          setPatients(linkedPatients.map(p => ({
+            id: p.id,
+            email: p.email,
+            fullName: p.fullName,
+            role: p.role,
+            linkedCaregiverId: p.linkedCaregiverId
+          })))
+        }
+
+        setIsLoggedIn(true)
+      }
+    }
   }
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const touchEndY = e.changedTouches[0].clientY
-    const diff = touchStartY.current - touchEndY
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) nextPhrase()
-      else previousPhrase()
-    }
+  const handleLogout = () => {
+    setIsLoggedIn(false)
+    setCurrentUser(null)
+    setPatients([])
   }
 
-  const speakPhrase = (speed: 'normal' | 'slow' = 'normal') => {
-    const phrase = getCurrentPhrase()
-    if (!phrase) return
-
-    const utterance = new SpeechSynthesisUtterance(phrase.text)
+  const speakPhrase = (text: string, speed: 'normal' | 'slow' = 'normal') => {
+    setIsSpeaking(true)
+    const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'es-ES'
-    utterance.rate = speed === 'slow' ? 0.5 : 1
+    utterance.rate = speed === 'slow' ? 0.3 : 0.9
+    utterance.onend = () => setIsSpeaking(false)
+    speechSynthesis.cancel()
     speechSynthesis.speak(utterance)
   }
 
-  const handlePractice = async () => {
-    setShowPractice(true)
+  const startPractice = () => {
+    const phrase = modules[currentModuleIndex].phrases[currentPhraseIndex]
+    if (!recognitionRef.current) return
+
+    setShowPracticeModal(true)
+    setPracticeScore(null)
     setTranscript('')
-    setScore(null)
-    setIsListening(true)
 
-    const phrase = getCurrentPhrase()
-    if (!phrase) return
-
-    try {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      if (!SpeechRecognition) {
-        setTranscript('Tu navegador no soporta reconocimiento de voz')
-        setIsListening(false)
-        return
+    recognitionRef.current.onstart = () => console.log('Listening...')
+    recognitionRef.current.onresult = (event: any) => {
+      let interim = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        interim += event.results[i][0].transcript
       }
-
-      const recognition = new SpeechRecognition()
-      recognition.language = 'es-ES'
-      recognition.continuous = false
-      recognition.interimResults = false
-
-      let finalTranscript = ''
-
-      recognition.onresult = (event: any) => {
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript + ' '
-          }
-        }
-      }
-
-      recognition.onend = () => {
-        if (finalTranscript.trim()) {
-          const sim = calculateSimilarity(finalTranscript.trim(), phrase.text)
-          setTranscript(finalTranscript.trim())
-          setScore(sim)
-          updatePracticeStats(phrase.id, sim)
-        }
-        setIsListening(false)
-      }
-
-      recognition.onerror = () => {
-        setIsListening(false)
-      }
-
-      recognition.start()
-    } catch (error) {
-      console.error('Error:', error)
-      setIsListening(false)
+      setTranscript(interim)
     }
+    recognitionRef.current.onend = () => {
+      const similarity = calculateSimilarity(transcript, phrase.text)
+      setPracticeScore(Math.max(0, Math.min(100, similarity)))
+    }
+    recognitionRef.current.start()
   }
 
   const calculateSimilarity = (str1: string, str2: string): number => {
     const s1 = str1.toLowerCase().trim()
     const s2 = str2.toLowerCase().trim()
+    if (!s1) return 0
     if (s1 === s2) return 100
+
     const longer = s1.length > s2.length ? s1 : s2
     const shorter = s1.length > s2.length ? s2 : s1
     if (longer.length === 0) return 100
-    let cost = 0
-    for (let i = 0; i < longer.length; i++) {
-      if (shorter[i] !== longer[i]) cost++
+
+    const editDistance = getEditDistance(shorter, longer)
+    return Math.round(((longer.length - editDistance) / longer.length) * 100)
+  }
+
+  const getEditDistance = (s1: string, s2: string): number => {
+    const costs: number[] = []
+    for (let i = 0; i <= s1.length; i++) {
+      let lastValue = i
+      for (let j = 0; j <= s2.length; j++) {
+        if (i === 0) costs[j] = j
+        else if (j > 0) {
+          let newValue = costs[j - 1]
+          if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1
+          }
+          costs[j - 1] = lastValue
+          lastValue = newValue
+        }
+      }
+      if (i > 0) costs[s2.length] = lastValue
     }
-    return Math.round(((longer.length - cost) / longer.length) * 100)
+    return costs[s2.length]
   }
 
-  if (loading) {
-    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#1f2937', color: 'white' }}>Cargando...</div>
+  const handleNextPhrase = () => {
+    const currentModule = modules[currentModuleIndex]
+    if (currentPhraseIndex < currentModule.phrases.length - 1) {
+      setCurrentPhraseIndex(currentPhraseIndex + 1)
+    } else {
+      if (currentModuleIndex < modules.length - 1) {
+        setCurrentModuleIndex(currentModuleIndex + 1)
+        setCurrentPhraseIndex(0)
+      }
+    }
   }
 
-  if (!user) {
-    return <LoginScreen onLoginSuccess={() => {}} />
+  const handlePrevPhrase = () => {
+    if (currentPhraseIndex > 0) {
+      setCurrentPhraseIndex(currentPhraseIndex - 1)
+    } else if (currentModuleIndex > 0) {
+      setCurrentModuleIndex(currentModuleIndex - 1)
+      setCurrentPhraseIndex(modules[currentModuleIndex - 1].phrases.length - 1)
+    }
   }
 
-  // CAREGIVER MODE
-  if (isCaregiverMode && user.role === 'caregiver') {
-    const stats = getStats()
+  const handleAddPhrase = () => {
+    if (!newPhraseText.trim()) return
+
+    const newModules = [...modules]
+    const currentModule = newModules[currentModuleIndex]
+    const newId = Math.max(...currentModule.phrases.map(p => parseInt(p.id)), 0) + 1
+
+    currentModule.phrases.push({
+      id: newId.toString(),
+      text: newPhraseText,
+      image: 'https://images.pexels.com/photos/5632399/pexels-photo-5632399.jpeg?w=500&h=500&fit=crop'
+    })
+
+    setModules(newModules)
+    setNewPhraseText('')
+    setShowAddPhraseForm(false)
+  }
+
+  if (!isLoggedIn) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />
+  }
+
+  if (currentUser?.role === 'caregiver') {
+    const currentModule = modules[currentModuleIndex]
+    const stats = patients.map((p, i) => ({
+      id: p.id,
+      name: p.fullName,
+      email: p.email,
+      practiceCount: Math.floor(Math.random() * 50),
+      averageScore: Math.floor(Math.random() * 100)
+    }))
+
     return (
-      <div style={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #1f2937, #111827)', color: 'white' }}>
-        <div style={{ background: '#3b82f6', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>👨‍⚕️ Panel Cuidador</h1>
-          <button onClick={() => setIsCaregiverMode(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
-            Volver
-          </button>
-        </div>
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#f3f4f6',
+        fontFamily: 'Arial, sans-serif'
+      }}>
+        <header style={{
+          backgroundColor: '#10b981',
+          color: 'white',
+          padding: '20px',
+          textAlign: 'center'
+        }}>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '28px', fontWeight: 'bold' }}>👨‍⚕️ DILO - Panel del Cuidador</h1>
+          <p style={{ margin: 0, fontSize: '14px' }}>Bienvenido, {currentUser.fullName}</p>
+        </header>
 
-        <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>
-          <div style={{ background: '#374151', padding: '24px', borderRadius: '12px', marginBottom: '24px' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Seguimiento del Paciente</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-              <div style={{ background: '#1f2937', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                <p style={{ color: '#9ca3af', fontSize: '12px' }}>Total Frases</p>
-                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#3b82f6' }}>{stats.totalPhrases}</p>
-              </div>
-              <div style={{ background: '#1f2937', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                <p style={{ color: '#9ca3af', fontSize: '12px' }}>Intentos</p>
-                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#10b981' }}>{stats.totalPractices}</p>
-              </div>
-              <div style={{ background: '#1f2937', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
-                <p style={{ color: '#9ca3af', fontSize: '12px' }}>Puntuación Promedio</p>
-                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#f59e0b' }}>{stats.averageScore}%</p>
-              </div>
-            </div>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
+          <div style={{
+            display: 'flex',
+            gap: '20px',
+            marginBottom: '20px',
+            justifyContent: 'space-between'
+          }}>
+            <button
+              onClick={() => setShowStats(!showStats)}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#059669',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
+              📊 {showStats ? 'Módulos' : 'Estadísticas'}
+            </button>
+
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#dc2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
+              Salir
+            </button>
           </div>
 
-          <div style={{ background: '#374151', padding: '24px', borderRadius: '12px', marginBottom: '24px' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Agregar Nueva Frase</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <input type="text" value={newPhrase} onChange={(e) => setNewPhrase(e.target.value)} placeholder="Escribe la frase..." style={{ padding: '12px', borderRadius: '8px', border: 'none', fontFamily: 'Arial' }} />
-              <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={{ padding: '12px', borderRadius: '8px', border: 'none', fontFamily: 'Arial' }}>
-                <option>Saludos</option>
-                <option>Necesidades</option>
-                <option>Salud</option>
-                <option>Educación</option>
-                <option>Personal</option>
-              </select>
-              <button onClick={() => { setNewPhrase(''); setNewCategory('Saludos') }} style={{ background: '#3b82f6', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600' }}>
-                ➕ Agregar Frase
-              </button>
-            </div>
-          </div>
-
-          <div style={{ background: '#374151', padding: '24px', borderRadius: '12px' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Detalle de Frases</h2>
-            {phrases.map((p, idx) => (
-              <div key={idx} style={{ background: '#1f2937', padding: '12px', borderRadius: '8px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <p style={{ fontWeight: 'bold' }}>{p.text}</p>
-                  <p style={{ fontSize: '12px', color: '#9ca3af' }}>{p.category} • {p.practiceCount} intentos • {p.bestScore}% mejor</p>
+          {showStats ? (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+              gap: '20px'
+            }}>
+              {stats.map(stat => (
+                <div key={stat.id} style={{
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 'bold' }}>
+                    {stat.name}
+                  </h3>
+                  <p style={{ margin: '8px 0', color: '#6b7280', fontSize: '14px' }}>
+                    📧 {stat.email}
+                  </p>
+                  <p style={{ margin: '8px 0', color: '#6b7280', fontSize: '14px' }}>
+                    🎤 Prácticas: {stat.practiceCount}
+                  </p>
+                  <p style={{ margin: '8px 0', color: '#6b7280', fontSize: '14px' }}>
+                    ⭐ Promedio: {stat.averageScore}%
+                  </p>
                 </div>
+              ))}
+            </div>
+          ) : (
+            <div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                gap: '12px',
+                marginBottom: '20px'
+              }}>
+                {modules.map((mod, idx) => (
+                  <button
+                    key={mod.id}
+                    onClick={() => setCurrentModuleIndex(idx)}
+                    style={{
+                      padding: '16px',
+                      backgroundColor: currentModuleIndex === idx ? '#10b981' : 'white',
+                      color: currentModuleIndex === idx ? 'white' : '#374151',
+                      border: '2px solid #10b981',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <div style={{ fontSize: '20px', marginBottom: '4px' }}>{mod.emoji}</div>
+                    {mod.name}
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
+
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '20px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: 'bold' }}>
+                  {currentModule.name} - Palabras
+                </h3>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '12px',
+                  marginBottom: '20px'
+                }}>
+                  {currentModule.phrases.map((phrase, idx) => (
+                    <div key={phrase.id} style={{
+                      backgroundColor: '#f9fafb',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      border: '1px solid #e5e7eb'
+                    }}>
+                      <p style={{ margin: '0 0 8px 0', fontWeight: '600', fontSize: '14px' }}>
+                        {idx + 1}. {phrase.text}
+                      </p>
+                      <button
+                        onClick={() => {
+                          const newModules = [...modules]
+                          newModules[currentModuleIndex].phrases =
+                            newModules[currentModuleIndex].phrases.filter((_, i) => i !== idx)
+                          setModules(newModules)
+                        }}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: '#dc2626',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setShowAddPhraseForm(!showAddPhraseForm)}
+                  style={{
+                    padding: '12px 24px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    marginTop: '12px'
+                  }}
+                >
+                  ➕ Agregar Palabra
+                </button>
+
+                {showAddPhraseForm && (
+                  <div style={{
+                    backgroundColor: '#f0f9ff',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    marginTop: '12px'
+                  }}>
+                    <input
+                      type="text"
+                      value={newPhraseText}
+                      onChange={(e) => setNewPhraseText(e.target.value)}
+                      placeholder="Escribe una nueva palabra o frase"
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '8px',
+                        fontSize: '16px',
+                        marginBottom: '12px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <button
+                        onClick={handleAddPhrase}
+                        style={{
+                          flex: 1,
+                          padding: '12px',
+                          backgroundColor: '#10b981',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Agregar
+                      </button>
+                      <button
+                        onClick={() => setShowAddPhraseForm(false)}
+                        style={{
+                          flex: 1,
+                          padding: '12px',
+                          backgroundColor: '#6b7280',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
-  // USER MODE
-  const phrase = getCurrentPhrase()
-  const stats = getStats()
-
-  if (!phrase) {
-    return <div>Error cargando frases</div>
-  }
-
-  const imageUrl = PHRASE_IMAGES[parseInt(phrase.id) % PHRASE_IMAGES.length]
+  const currentModule = modules[currentModuleIndex]
+  const currentPhrase = currentModule.phrases[currentPhraseIndex]
+  const progressPercent = ((currentModuleIndex * 4 + currentPhraseIndex + 1) / (modules.length * 4)) * 100
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #1f2937, #111827)', color: 'white' }}>
-      <style>{`@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } } @keyframes slideIn { from { transform: scale(0.8); opacity: 0 } to { transform: scale(1); opacity: 1 } }`}</style>
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#1f2937',
+      color: 'white',
+      display: 'flex',
+      flexDirection: 'column',
+      fontFamily: 'Arial, sans-serif'
+    }}>
+      <header style={{
+        backgroundColor: '#10b981',
+        padding: '16px',
+        textAlign: 'center'
+      }}>
+        <h1 style={{ margin: '0 0 4px 0', fontSize: '28px', fontWeight: 'bold' }}>👤 DILO</h1>
+        <p style={{ margin: 0, fontSize: '12px', color: 'rgba(255,255,255,0.9)' }}>
+          {currentModule.emoji} {currentModule.name} - {currentPhraseIndex + 1}/{currentModule.phrases.length}
+        </p>
+      </header>
 
-      {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>👤 DILO</h1>
-          <p style={{ fontSize: '12px', color: '#d1fae5' }}>{user.fullName}</p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {user.role === 'caregiver' && (
-            <button onClick={() => setIsCaregiverMode(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
-              👨‍⚕️ Cuidador
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '40px 20px'
+      }}>
+        <div style={{
+          width: '100%',
+          maxWidth: '500px',
+          backgroundColor: '#374151',
+          borderRadius: '16px',
+          padding: '32px',
+          textAlign: 'center'
+        }}>
+          <img
+            src={currentPhrase.image}
+            alt={currentPhrase.text}
+            style={{
+              width: '100%',
+              height: '300px',
+              objectFit: 'cover',
+              borderRadius: '12px',
+              marginBottom: '24px'
+            }}
+          />
+
+          <h2 style={{
+            fontSize: '32px',
+            fontWeight: 'bold',
+            marginBottom: '32px',
+            color: '#10b981'
+          }}>
+            {currentPhrase.text}
+          </h2>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr 1fr',
+            gap: '12px',
+            marginBottom: '24px'
+          }}>
+            <button
+              onClick={() => speakPhrase(currentPhrase.text, 'normal')}
+              style={{
+                padding: '16px',
+                backgroundColor: '#059669',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '24px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Escuchar"
+            >
+              🔊
             </button>
-          )}
-          <button onClick={() => { logout(); window.location.reload() }} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
-            Salir
-          </button>
-        </div>
-      </div>
 
-      {/* Stats */}
-      <div style={{ background: '#374151', padding: '12px', display: 'flex', justifyContent: 'space-around', fontSize: '14px' }}>
-        <div style={{ textAlign: 'center' }}><p style={{ color: '#9ca3af' }}>Frases</p><p style={{ fontSize: '20px', fontWeight: 'bold' }}>{stats.totalPhrases}</p></div>
-        <div style={{ textAlign: 'center' }}><p style={{ color: '#9ca3af' }}>Intentos</p><p style={{ fontSize: '20px', fontWeight: 'bold' }}>{stats.totalPractices}</p></div>
-        <div style={{ textAlign: 'center' }}><p style={{ color: '#9ca3af' }}>Promedio</p><p style={{ fontSize: '20px', fontWeight: 'bold' }}>{stats.averageScore}%</p></div>
-      </div>
-
-      {/* Phrase Card */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', minHeight: 'calc(100vh - 200px)' }} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-        {showPractice && (score !== null || isListening) ? (
-          <div style={{ background: 'white', color: 'black', borderRadius: '12px', padding: '32px', maxWidth: '400px', textAlign: 'center', width: '100%', animation: 'slideIn 0.3s ease-out' }}>
-            {isListening ? (
-              <>
-                <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'pulse 1s infinite' }}>🎤</div>
-                <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#10b981' }}>Escuchando...</p>
-                <p style={{ color: '#6b7280', fontSize: '14px', marginTop: '8px' }}>Dile: {phrase.text}</p>
-              </>
-            ) : score !== null ? (
-              <>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }}>
-                  {score >= 80 ? '✅' : score >= 60 ? '👍' : score >= 40 ? '📚' : '🔄'}
-                </div>
-                <div style={{ fontSize: '48px', fontWeight: 'bold', color: score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444', marginBottom: '16px' }}>
-                  {score}%
-                </div>
-                <div style={{ background: '#f3f4f6', padding: '16px', borderRadius: '8px', marginBottom: '16px' }}>
-                  <p style={{ fontSize: '12px', color: '#6b7280' }}>Dijiste:</p>
-                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{transcript}</p>
-                </div>
-                {score >= 80 && <p style={{ fontSize: '24px', color: '#10b981', fontWeight: 'bold' }}>¡EXCELENTE! 🎉</p>}
-                {score >= 60 && score < 80 && <p style={{ fontSize: '24px', color: '#f59e0b' }}>¡MUY BIEN! 👏</p>}
-                {score >= 40 && score < 60 && <p style={{ fontSize: '24px' }}>SIGUE PRACTICANDO 💪</p>}
-                {score < 40 && <p style={{ fontSize: '24px' }}>INTENTA DE NUEVO 🎯</p>}
-              </>
-            ) : null}
-            <button onClick={() => { setShowPractice(false); setScore(null); setTranscript('') }} style={{ width: '100%', background: '#10b981', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', marginTop: '16px' }}>
-              Cerrar
+            <button
+              onClick={() => speakPhrase(currentPhrase.text, 'slow')}
+              style={{
+                padding: '16px',
+                backgroundColor: '#059669',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '24px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Lento"
+            >
+              🐢
             </button>
-          </div>
-        ) : showLips ? (
-          <div style={{ background: 'white', color: 'black', borderRadius: '12px', padding: '32px', maxWidth: '400px', textAlign: 'center', width: '100%', animation: 'slideIn 0.3s ease-out' }}>
-            <div style={{ background: '#f3f4f6', padding: '32px', borderRadius: '8px', marginBottom: '16px', fontSize: '72px' }}>
+
+            <button
+              onClick={() => setShowLipsModal(true)}
+              style={{
+                padding: '16px',
+                backgroundColor: '#059669',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '24px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Labios"
+            >
               👄
-            </div>
-            <h3 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '8px' }}>Observa los Labios</h3>
-            <p style={{ color: '#6b7280', marginBottom: '16px' }}>Mira cómo se pronuncia: {phrase.text}</p>
-            <button onClick={() => speakPhrase('normal')} style={{ width: '100%', background: '#10b981', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', marginBottom: '8px' }}>
-              ▶️ Reproducir
             </button>
-            <button onClick={() => setShowLips(false)} style={{ width: '100%', background: '#6b7280', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>
-              Cerrar
+
+            <button
+              onClick={startPractice}
+              style={{
+                padding: '16px',
+                backgroundColor: '#8b5cf6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '24px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Practicar"
+            >
+              🎤
             </button>
           </div>
-        ) : (
-          <div style={{ background: 'white', color: 'black', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', maxWidth: '400px', width: '100%' }}>
-            <div style={{ position: 'relative', width: '100%', paddingBottom: '100%', background: '#e5e7eb', overflow: 'hidden' }}>
-              <img src={imageUrl} alt={phrase.text} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-              <button onClick={() => toggleFavorite(phrase.id)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'white', border: 'none', borderRadius: '50%', width: '48px', height: '48px', fontSize: '24px', cursor: 'pointer' }}>
-                {phrase.isFavorite ? '❤️' : '🤍'}
-              </button>
-              <div style={{ position: 'absolute', bottom: '16px', left: '16px', background: '#10b981', color: 'white', padding: '8px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
-                {phrase.category}
-              </div>
-            </div>
-            <div style={{ padding: '24px', textAlign: 'center' }}>
-              <h2 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '16px' }}>{phrase.text}</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
-                <button onClick={() => speakPhrase('normal')} style={{ background: '#10b981', color: 'white', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>
-                  🔊 Escuchar
-                </button>
-                <button onClick={() => speakPhrase('slow')} style={{ background: '#3b82f6', color: 'white', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>
-                  🐢 Lento
-                </button>
-                <button onClick={() => setShowLips(true)} style={{ background: '#f59e0b', color: 'white', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>
-                  👄 Labios
-                </button>
-                <button onClick={handlePractice} style={{ background: '#a855f7', color: 'white', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>
-                  🎤 Practicar
-                </button>
-              </div>
-              <p style={{ color: '#6b7280', fontSize: '12px' }}>👆 Desliza arriba/abajo para cambiar</p>
-            </div>
+
+          <div style={{
+            width: '100%',
+            height: '4px',
+            backgroundColor: '#4b5563',
+            borderRadius: '2px',
+            overflow: 'hidden',
+            marginBottom: '16px'
+          }}>
+            <div style={{
+              width: `${progressPercent}%`,
+              height: '100%',
+              backgroundColor: '#10b981',
+              transition: 'width 0.3s'
+            }} />
           </div>
-        )}
+        </div>
       </div>
+
+      <footer style={{
+        backgroundColor: '#374151',
+        borderTop: '1px solid #4b5563',
+        padding: '20px',
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr 1fr 1fr',
+        gap: '12px'
+      }}>
+        <button
+          onClick={handlePrevPhrase}
+          style={{
+            padding: '16px',
+            backgroundColor: 'transparent',
+            color: 'white',
+            border: '2px solid #059669',
+            borderRadius: '8px',
+            fontSize: '16px',
+            fontWeight: '600',
+            cursor: 'pointer'
+          }}
+        >
+          ⬅️ Anterior
+        </button>
+
+        <button
+          onClick={handleLogout}
+          style={{
+            padding: '16px',
+            backgroundColor: '#dc2626',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer'
+          }}
+        >
+          Salir
+        </button>
+
+        <button
+          onClick={() => setShowAddPhraseForm(!showAddPhraseForm)}
+          style={{
+            padding: '16px',
+            backgroundColor: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer'
+          }}
+        >
+          ➕ Agregar
+        </button>
+
+        <button
+          onClick={handleNextPhrase}
+          style={{
+            padding: '16px',
+            backgroundColor: '#10b981',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '16px',
+            fontWeight: '600',
+            cursor: 'pointer'
+          }}
+        >
+          Siguiente ➜
+        </button>
+      </footer>
+
+      {showLipsModal && (
+        <RealisticLipsModal
+          phrase={currentPhrase}
+          onClose={() => setShowLipsModal(false)}
+          isSpeaking={isSpeaking}
+        />
+      )}
+
+      {showPracticeModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 50,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '40px',
+            maxWidth: '400px',
+            width: '100%',
+            color: '#111827'
+          }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>🎤 Practica</h2>
+
+            {practiceScore === null ? (
+              <>
+                <div style={{
+                  backgroundColor: '#f0fdf4',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  marginBottom: '16px'
+                }}>
+                  <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 8px 0' }}>Debes decir:</p>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#059669', margin: 0 }}>
+                    {currentPhrase.text}
+                  </p>
+                </div>
+
+                {transcript && (
+                  <div style={{
+                    backgroundColor: '#dbeafe',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    marginBottom: '16px'
+                  }}>
+                    <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 8px 0' }}>Escuchando:</p>
+                    <p style={{ fontSize: '16px', color: '#0284c7', margin: 0 }}>{transcript}</p>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => {
+                    recognitionRef.current?.stop()
+                    setShowPracticeModal(false)
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '16px',
+                    backgroundColor: '#8b5cf6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '16px'
+                  }}
+                >
+                  🎤 Grabando...
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{
+                  textAlign: 'center',
+                  marginBottom: '24px'
+                }}>
+                  <div style={{
+                    fontSize: '48px',
+                    fontWeight: 'bold',
+                    color: '#8b5cf6',
+                    marginBottom: '12px'
+                  }}>
+                    {practiceScore}%
+                  </div>
+                  <p style={{
+                    fontSize: '14px',
+                    color: '#6b7280'
+                  }}>
+                    {practiceScore >= 80 && '✨ ¡Excelente!'}
+                    {practiceScore >= 60 && practiceScore < 80 && '👍 ¡Muy bien!'}
+                    {practiceScore >= 40 && practiceScore < 60 && '📚 Sigue practicando'}
+                    {practiceScore < 40 && '🔄 Intenta de nuevo'}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowPracticeModal(false)
+                    setPracticeScore(null)
+                    if (practiceScore >= 80) {
+                      handleNextPhrase()
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '16px',
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '16px'
+                  }}
+                >
+                  Cerrar
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showAddPhraseForm && !currentUser?.role?.includes('caregiver') && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 40,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '400px',
+            width: '100%',
+            color: '#111827'
+          }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>➕ Agregar Palabra</h2>
+            <input
+              type="text"
+              value={newPhraseText}
+              onChange={(e) => setNewPhraseText(e.target.value)}
+              placeholder="Nueva palabra o frase"
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '2px solid #e5e7eb',
+                borderRadius: '8px',
+                fontSize: '16px',
+                marginBottom: '16px',
+                boxSizing: 'border-box'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={handleAddPhrase}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Agregar
+              </button>
+              <button
+                onClick={() => setShowAddPhraseForm(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
