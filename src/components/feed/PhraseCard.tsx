@@ -1,64 +1,59 @@
 import React from 'react'
 import { motion } from 'framer-motion'
-import { Badge } from '@/components/common/Badge'
-import { Phrase } from '@/types'
+
+interface Phrase {
+  id: string
+  text: string
+  category: string
+  imageUrl: string
+  isFavorite?: boolean
+}
 
 interface PhraseCardProps {
   phrase: Phrase
-  isActive: boolean
+  onFavoriteToggle: () => void
 }
 
-export const PhraseCard: React.FC<PhraseCardProps> = ({ phrase, isActive }) => {
+export const PhraseCard: React.FC<PhraseCardProps> = ({ phrase, onFavoriteToggle }) => {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -40 }}
-      transition={{ duration: 0.3 }}
-      className="relative bg-dark-surface rounded-3xl overflow-hidden shadow-lg"
-      style={{
-        aspectRatio: '16 / 10',
-      }}
-    >
-      {/* Imagen */}
-      <img
-        src={phrase.image.url}
-        alt={phrase.image.alt}
-        className="w-full h-full object-cover"
-        onError={(e) => {
-          e.currentTarget.src = 'https://via.placeholder.com/343x215?text=Sin+imagen'
-        }}
-      />
+    <div className="bg-white rounded-xl shadow-2xl overflow-hidden">
+      {/* Image */}
+      <div className="relative w-full aspect-square bg-gray-200 overflow-hidden">
+        <img
+          src={phrase.imageUrl}
+          alt={phrase.text}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1516035069371-29ad0ffe62fa?w=400&h=400&fit=crop'
+          }}
+        />
 
-      {/* Gradiente oscuro en la parte inferior */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
+        {/* Favorite Button */}
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={onFavoriteToggle}
+          className="absolute top-4 right-4 bg-white rounded-full p-3 shadow-lg"
+        >
+          <span className="text-2xl">{phrase.isFavorite ? '❤️' : '🤍'}</span>
+        </motion.button>
 
-      {/* Contenido */}
-      <div className="absolute inset-0 flex flex-col justify-between p-4">
-        {/* Categoría */}
-        <div className="flex justify-start">
-          <Badge text={phrase.category} />
-        </div>
-
-        {/* Texto y indicador */}
-        <div className="space-y-2">
-          <h2 className="text-4xl font-bold text-white leading-tight drop-shadow-lg">
-            {phrase.text}
-          </h2>
-          <p className="text-sm text-gray-300 opacity-80">
-            Desliza hacia arriba para la siguiente frase
-          </p>
-          <div className="flex justify-center pt-2">
-            <motion.div
-              animate={{ y: [0, 5, 0] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="text-gray-300"
-            >
-              ↑
-            </motion.div>
-          </div>
+        {/* Category Badge */}
+        <div className="absolute bottom-4 left-4 bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
+          {phrase.category}
         </div>
       </div>
-    </motion.div>
+
+      {/* Text */}
+      <div className="p-6 text-center">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">{phrase.text}</h2>
+        <p className="text-gray-600 text-sm">Desliza para cambiar de frase</p>
+      </div>
+
+      {/* Hint */}
+      <div className="px-6 pb-6 text-center text-gray-500 text-xs">
+        Palabra clave: <span className="font-semibold text-purple-600">{phrase.text.split(' ')[0]}</span>
+      </div>
+    </div>
   )
 }

@@ -1,65 +1,39 @@
 import React from 'react'
-import { ActionButton } from './ActionButton'
-import { COLORS } from '@/config/theme'
+import { motion } from 'framer-motion'
+import { Button } from '@/components/common/Button'
 
-interface ActionBarProps {
-  onListenClick: () => void
-  onSlowClick: () => void
-  onLipsClick: () => void
-  onPracticeClick: () => void
-  isPlaying: boolean
-  isRecording: boolean
-  hasAudio: boolean
-  hasSlowAudio: boolean
-  hasVideo: boolean
+interface Phrase {
+  text: string
 }
 
-export const ActionBar: React.FC<ActionBarProps> = ({
-  onListenClick,
-  onSlowClick,
-  onLipsClick,
-  onPracticeClick,
-  isPlaying,
-  isRecording,
-  hasAudio,
-  hasSlowAudio,
-  hasVideo
-}) => {
+interface ActionBarProps {
+  phrase: Phrase
+  onPractice: () => void
+  onNext: () => void
+  onPrev: () => void
+}
+
+export const ActionBar: React.FC<ActionBarProps> = ({ onPractice, onNext, onPrev }) => {
+  const actions = [
+    { icon: '🔙', label: 'Anterior', onClick: onPrev },
+    { icon: '🎤', label: 'Practicar', onClick: onPractice },
+    { icon: '▶️', label: 'Siguiente', onClick: onNext }
+  ]
+
   return (
-    <div className="flex items-center justify-center gap-8 px-4 py-6">
-      <ActionButton
-        icon="🔊"
-        label="Escuchar"
-        color={COLORS.action.listen}
-        isActive={isPlaying}
-        disabled={!hasAudio}
-        onClick={onListenClick}
-        ariaLabel="Escuchar frase a velocidad normal"
-      />
-      <ActionButton
-        icon="🐢"
-        label="Lento"
-        color={COLORS.action.slow}
-        disabled={!hasSlowAudio}
-        onClick={onSlowClick}
-        ariaLabel="Escuchar frase lentamente"
-      />
-      <ActionButton
-        icon="👄"
-        label="Labios"
-        color={COLORS.action.lips}
-        disabled={!hasVideo}
-        onClick={onLipsClick}
-        ariaLabel="Ver labios pronunciando la frase"
-      />
-      <ActionButton
-        icon="🎤"
-        label="Practicar"
-        color={COLORS.action.practice}
-        isActive={isRecording}
-        onClick={onPracticeClick}
-        ariaLabel="Grabar tu intento de pronunciación"
-      />
+    <div className="bg-gray-800 border-t border-gray-700 p-6 flex justify-around">
+      {actions.map((action, idx) => (
+        <motion.button
+          key={idx}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={action.onClick}
+          className="flex flex-col items-center gap-2 text-white hover:text-purple-400 transition"
+        >
+          <div className="text-4xl">{action.icon}</div>
+          <p className="text-xs text-gray-300">{action.label}</p>
+        </motion.button>
+      ))}
     </div>
   )
 }

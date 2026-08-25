@@ -1,174 +1,136 @@
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Modal } from '@/components/common/Modal'
 import { Button } from '@/components/common/Button'
-import { Phrase } from '@/types'
 import { useRecording } from '@/hooks/useRecording'
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
+import { usePhraseStore } from '@/store/phraseStore'
 
-interface PracticeRecorderModalProps {
-  isOpen: boolean
-  onClose: () => void
-  phrase: Phrase
+interface Phrase {
+  id: string
+  text: string
 }
 
-export const PracticeRecorderModal: React.FC<PracticeRecorderModalProps> = ({
-  isOpen,
-  onClose,
-  phrase
-}) => {
-  const { isRecording, recordingTime, audioUrl, startRecording, stopRecording, clearRecording } = useRecording()
+interface PracticeRecorderModalProps {
+  phrase: Phrase
+  onClose: () => void
+}
+
+export const PracticeRecorderModal: React.FC<PracticeRecorderModalProps> = ({ phrase, onClose }) => {
+  const { isRecording, recordingTime, startRecording, stopRecording } = useRecording()
+  const { isListening, transcript, finalTranscript, startListening, stopListening } = useSpeechRecognition()
+  const { updatePracticeStats } = usePhraseStore()
+  const [score, setScore] = useState<number | null>(null)
+  const [showResult, setShowResult] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
-  const [isPlayingRecording, setIsPlayingRecording] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
-
-  const handleStartRecording = async () => {
+  const handleStart = async () => {
     try {
-      setError(null)
       await startRecording()
+      await startListening()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al acceder al micrófono')
+      console.error('Error:', err)
     }
   }
 
-  const handleStopRecording = () => {
+  const handleStop = () => {
     stopRecording()
+    stopListening()
+
+    if (finalTranscript) {
+      const similarity = calculateSimilarity(finalTranscript, phrase.text)
+      setScore(similarity)
+      setShowResult(true)
+      updatePracticeStats(phrase.id, similarity)
+    }
   }
 
-  const handlePlayRecording = async () => {
-    if (audioRef.current) {
-      if (isPlayingRecording) {
-        audioRef.current.pause()
-        setIsPlayingRecording(false)
-      } else {
-        await audioRef.current.play()
-        setIsPlayingRecording(true)
+  const calculateSimilarity = (str1: string, str2: string): number => {
+    const s1 = str1.toLowerCase().trim()
+    const s2 = str2.toLowerCase().trim()
+    if (s1 === s2) return 100
+    const longer = s1.length > s2.length ? s1 : s2
+    const shorter = s1.length > s2.length ? s2 : s1
+    if (longer.length === 0) return 100
+    const editDistance = getEditDistance(shorter, longer)
+    return Math.round(((longer.length - editDistance) / longer.length) * 100)
+  }
+
+  const getEditDistance = (s1: string, s2: string): number => {
+    const costs: number[] = []
+    for (let i = 0; i <= s1.length; i++) {
+      let lastValue = i
+      for (let j = 0; j <= s2.length; j++) {
+        if (i === 0) costs[j] = j
+        else if (j > 0) {
+          let newValue = costs[j - 1]
+          if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1
+          }
+          costs[j - 1] = lastValue
+          lastValue = newValue
+        }
       }
+      if (i > 0) costs[s2.length] = lastValue
     }
+    return costs[s2.length]
   }
-
-  const handleRetry = () => {
-    clearRecording()
-    handleStartRecording()
-  }
-
-  const handleClose = () => {
-    if (isRecording) {
-      stopRecording()
-    }
-    if (audioUrl) {
-      clearRecording()
-    }
-    onClose()
-  }
-
-  useEffect(() => {
-    return () => {
-      if (isRecording) {
-        stopRecording()
-      }
-    }
-  }, [])
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Practicar">
-      <div className="space-y-6">
-        {/* Subtitle */}
-        <div className="text-center">
-          <p className="text-gray-400 mb-3">Ahora dilo tú</p>
-          <h3 className="text-2xl font-bold text-white">{phrase.text}</h3>
-        </div>
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-lg max-w-md w-full p-6 space-y-4"
+      >
+        <h2 className="text-2xl font-bold text-gray-900">🎤 Practica</h2>
 
-        {/* Record Button */}
-        {!audioUrl && (
-          <div className="flex flex-col items-center gap-4">
-            <div className="relative">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                animate={isRecording ? { scale: [1, 1.1, 1] } : {}}
-                transition={isRecording ? { duration: 0.6, repeat: Infinity } : {}}
-                onClick={isRecording ? handleStopRecording : handleStartRecording}
-                disabled={!!error}
-                className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl transition-all duration-200 ${
-                  isRecording
-                    ? 'bg-accent-practice'
-                    : 'bg-accent-practice hover:bg-opacity-90'
-                }`}
-              >
-                🎤
-              </motion.button>
-              {isRecording && (
-                <motion.div
-                  className="absolute inset-0 rounded-full border-4 border-accent-practice"
-                  animate={{ scale: [1, 1.5], opacity: [1, 0] }}
-                  transition={{ duration: 1, repeat: Infinity }}
-                />
-              )}
+        {!showResult ? (
+          <>
+            <div className="bg-purple-100 p-4 rounded-lg">
+              <p className="text-gray-600 text-sm">Debes decir:</p>
+              <p className="text-xl font-bold text-purple-600">{phrase.text}</p>
             </div>
 
-            {isRecording && (
-              <div className="text-center">
-                <p className="text-gray-300 font-semibold">{formatTime(recordingTime)}</p>
-                <p className="text-sm text-accent-practice">Grabando...</p>
+            {transcript && (
+              <div className="bg-blue-100 p-4 rounded-lg">
+                <p className="text-gray-600 text-sm">Escuchando:</p>
+                <p className="text-lg text-blue-600">{transcript}</p>
               </div>
             )}
 
-            {error && (
-              <div className="text-center">
-                <p className="text-sm text-red-400">{error}</p>
-                <Button
-                  size="md"
-                  onClick={handleStartRecording}
-                  className="mt-2"
-                >
-                  Reintentar
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Playback */}
-        {audioUrl && (
-          <div className="space-y-4">
-            <audio ref={audioRef} src={audioUrl} />
-            <div className="flex gap-3">
+            <div className="text-center">
+              <p className="text-gray-600 mb-4">
+                {isRecording ? `Grabando... ${recordingTime}s` : 'Listo para grabar'}
+              </p>
               <Button
-                size="md"
-                variant="secondary"
-                onClick={handlePlayRecording}
-                className="flex-1"
+                onClick={isRecording ? handleStop : handleStart}
+                className={`w-full ${isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-purple-600'}`}
               >
-                {isPlayingRecording ? '⏸ Pausar' : '▶ Escuchar'}
-              </Button>
-              <Button
-                size="md"
-                variant="secondary"
-                onClick={handleRetry}
-                className="flex-1"
-              >
-                🔄 Reintentar
+                {isRecording ? '⏹ Detener' : '🎤 Comenzar'}
               </Button>
             </div>
-          </div>
-        )}
+          </>
+        ) : (
+          <>
+            <div className="text-center space-y-4">
+              <div className="text-6xl font-bold text-purple-600">{score}%</div>
+              <div className="bg-gray-100 p-4 rounded-lg">
+                <p className="text-gray-600 text-sm mb-1">Dijiste:</p>
+                <p className="text-lg font-semibold text-gray-900">{finalTranscript}</p>
+              </div>
 
-        {/* Close */}
-        <Button
-          size="lg"
-          variant="secondary"
-          onClick={handleClose}
-          className="w-full"
-        >
-          Cerrar
-        </Button>
-      </div>
-    </Modal>
+              {score! >= 80 && <p className="text-2xl">✨ ¡Excelente!</p>}
+              {score! >= 60 && score! < 80 && <p className="text-2xl">👍 ¡Muy bien!</p>}
+              {score! >= 40 && score! < 60 && <p className="text-2xl">📚 Sigue practicando</p>}
+              {score! < 40 && <p className="text-2xl">🔄 Intenta de nuevo</p>}
+            </div>
+
+            <Button onClick={onClose} className="w-full">
+              Cerrar
+            </Button>
+          </>
+        )}
+      </motion.div>
+    </div>
   )
 }

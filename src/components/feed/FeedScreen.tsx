@@ -1,156 +1,110 @@
-import React, { useRef, useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useAppStore } from '@/store/appStore'
+import React, { useRef, useState } from 'react'
+import { motion } from 'framer-motion'
+import { usePhraseStore } from '@/store/phraseStore'
 import { useSwipe } from '@/hooks/useSwipe'
-import { useAudio } from '@/hooks/useAudio'
-import { useRecording } from '@/hooks/useRecording'
-import { useTripleTap } from '@/hooks/useTripleTap'
-import { TopBar } from './TopBar'
+import { useAuth } from '@/hooks/useAuth'
 import { PhraseCard } from './PhraseCard'
 import { ActionBar } from './ActionBar'
-import { LipsVideoModal } from '@/components/modals/LipsVideoModal'
 import { PracticeRecorderModal } from '@/components/modals/PracticeRecorderModal'
-import { CaregiverMode } from '@/components/caregiver/CaregiverMode'
+import { Button } from '@/components/common/Button'
 
-export const FeedScreen: React.FC = () => {
+interface FeedScreenProps {
+  onCaregiverMode?: () => void
+}
+
+export const FeedScreen: React.FC<FeedScreenProps> = ({ onCaregiverMode }) => {
+  const { user, logout } = useAuth()
   const containerRef = useRef<HTMLDivElement>(null)
-  const [showLipsModal, setShowLipsModal] = useState(false)
   const [showPracticeModal, setShowPracticeModal] = useState(false)
-  const [showCaregiverMode, setShowCaregiverMode] = useState(false)
 
-  // Store
   const {
-    phrases,
-    currentIndex,
-    favorites,
-    isPlaying,
-    isRecording,
+    getCurrentPhrase,
     nextPhrase,
     previousPhrase,
-    getCurrentPhrase,
     toggleFavorite,
-    isFavorite,
-    setIsPlaying,
-    setIsRecording,
-    loadFavorites
-  } = useAppStore()
-
-  // Hooks
-  const { play, pause, stop } = useAudio()
-  const { startRecording, stopRecording } = useRecording()
+    getStats
+  } = usePhraseStore()
 
   const currentPhrase = getCurrentPhrase()
+  const stats = getStats()
 
-  // Cargar favoritas al inicio
-  useEffect(() => {
-    loadFavorites()
-  }, [loadFavorites])
-
-  // Triple tap para menú cuidador
-  useTripleTap(() => {
-    setShowCaregiverMode(true)
-  }, 300)
-
-  // Swipe gestures
   useSwipe(containerRef, {
-    onSwipeUp: nextPhrase,
-    onSwipeDown: previousPhrase,
-    threshold: 30
+    onSwipeLeft: nextPhrase,
+    onSwipeRight: previousPhrase
   })
 
-  // Handlers
-  const handleListen = async () => {
-    if (!currentPhrase) return
-    if (isPlaying) {
-      pause()
-      setIsPlaying(false)
-    } else {
-      setIsPlaying(true)
-      await play(currentPhrase.normalAudio.url, 1)
-    }
-  }
-
-  const handleSlow = async () => {
-    if (!currentPhrase) return
-    setIsPlaying(true)
-    await play(currentPhrase.slowAudio.url, 0.75)
-  }
-
-  const handleLips = () => {
-    setShowLipsModal(true)
-  }
-
-  const handlePractice = () => {
-    setShowPracticeModal(true)
-  }
-
-  const handleFavoriteToggle = () => {
-    if (currentPhrase) {
-      toggleFavorite(currentPhrase.id)
-    }
-  }
-
   if (!currentPhrase) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-dark-bg text-white">
-        <div className="text-center">
-          <p className="text-xl">No hay frases disponibles</p>
-          <p className="text-gray-400 text-sm mt-2">Pídele al cuidador que agregue frases</p>
-        </div>
-      </div>
-    )
+    return <div className="flex items-center justify-center min-h-screen">Cargando...</div>
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="flex flex-col h-screen bg-dark-bg text-white overflow-hidden"
-    >
-      {/* TopBar */}
-      <TopBar
-        current={currentIndex}
-        total={phrases.length}
-        isFavorite={isFavorite(currentPhrase.id)}
-        onFavoriteToggle={handleFavoriteToggle}
-      />
-
-      {/* Feed Container */}
-      <div className="flex-1 flex items-center justify-center px-4 py-6 overflow-hidden">
-        <AnimatePresence mode="wait">
-          <PhraseCard key={currentPhrase.id} phrase={currentPhrase} isActive={true} />
-        </AnimatePresence>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex flex-col" ref={containerRef}>
+      {/* Header */}
+      <div className="bg-purple-600 text-white p-4 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold">🎤 Speech Swipe</h1>
+          <p className="text-sm text-purple-200">{user?.fullName}</p>
+        </div>
+        <div className="flex gap-2">
+          {user?.role === 'caregiver' && (
+            <Button onClick={onCaregiverMode} size="sm" variant="secondary">
+              👨‍⚕️ Cuidador
+            </Button>
+          )}
+          <Button onClick={logout} size="sm" variant="secondary">
+            Salir
+          </Button>
+        </div>
       </div>
 
-      {/* ActionBar */}
+      {/* Stats */}
+      <div className="bg-gray-800 text-white p-3 flex justify-around text-sm">
+        <div className="text-center">
+          <p className="text-gray-400">Frases</p>
+          <p className="text-xl font-bold">{stats.totalPhrases}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-gray-400">Intentos</p>
+          <p className="text-xl font-bold">{stats.totalPractices}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-gray-400">Promedio</p>
+          <p className="text-xl font-bold">{stats.averageScore}%</p>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex items-center justify-center p-4">
+        <motion.div
+          key={currentPhrase.id}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          transition={{ duration: 0.3 }}
+          className="w-full max-w-md"
+        >
+          <PhraseCard
+            phrase={currentPhrase}
+            onFavoriteToggle={() => toggleFavorite(currentPhrase.id)}
+          />
+        </motion.div>
+      </div>
+
+      {/* Action Bar */}
       <ActionBar
-        onListenClick={handleListen}
-        onSlowClick={handleSlow}
-        onLipsClick={handleLips}
-        onPracticeClick={handlePractice}
-        isPlaying={isPlaying}
-        isRecording={isRecording}
-        hasAudio={!!currentPhrase.normalAudio}
-        hasSlowAudio={!!currentPhrase.slowAudio}
-        hasVideo={!!currentPhrase.lipVideo}
+        phrase={currentPhrase}
+        onPractice={() => setShowPracticeModal(true)}
+        onNext={nextPhrase}
+        onPrev={previousPhrase}
       />
 
       {/* Modals */}
-      <LipsVideoModal
-        isOpen={showLipsModal}
-        onClose={() => setShowLipsModal(false)}
-        phrase={currentPhrase}
-      />
-      <PracticeRecorderModal
-        isOpen={showPracticeModal}
-        onClose={() => setShowPracticeModal(false)}
-        phrase={currentPhrase}
-      />
-
-      {/* Caregiver Mode */}
-      <CaregiverMode
-        isOpen={showCaregiverMode}
-        onClose={() => setShowCaregiverMode(false)}
-      />
+      {showPracticeModal && (
+        <PracticeRecorderModal
+          phrase={currentPhrase}
+          onClose={() => setShowPracticeModal(false)}
+        />
+      )}
     </div>
   )
 }
