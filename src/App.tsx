@@ -564,12 +564,13 @@ const App: React.FC = () => {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
       backgroundColor: '#1f2937',
       color: 'white',
-      display: 'flex',
-      flexDirection: 'column',
-      fontFamily: 'Arial, sans-serif'
+      display: 'grid',
+      gridTemplateRows: 'auto 1fr auto',
+      fontFamily: 'Arial, sans-serif',
+      overflow: 'hidden'
     }}>
       <header style={{
         backgroundColor: '#10b981',
@@ -583,12 +584,11 @@ const App: React.FC = () => {
       </header>
 
       <div style={{
-        flex: 1,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '40px 20px 140px 20px',
+        padding: '40px 20px',
         overflowY: 'auto'
       }}>
         <div style={{
@@ -714,27 +714,22 @@ const App: React.FC = () => {
       </div>
 
       <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
         backgroundColor: '#374151',
         borderTop: '1px solid #4b5563',
-        padding: '20px',
+        padding: '12px',
         display: 'grid',
         gridTemplateColumns: '1fr 1fr 1fr 1fr',
-        gap: '12px',
-        zIndex: 10
+        gap: '8px'
       }}>
         <button
           onClick={handlePrevPhrase}
           style={{
-            padding: '16px',
+            padding: '8px 12px',
             backgroundColor: 'transparent',
             color: 'white',
-            border: '2px solid #059669',
-            borderRadius: '8px',
-            fontSize: '16px',
+            border: '1px solid #059669',
+            borderRadius: '6px',
+            fontSize: '12px',
             fontWeight: '600',
             cursor: 'pointer'
           }}
@@ -745,12 +740,12 @@ const App: React.FC = () => {
         <button
           onClick={handleLogout}
           style={{
-            padding: '16px',
+            padding: '8px 12px',
             backgroundColor: '#dc2626',
             color: 'white',
             border: 'none',
-            borderRadius: '8px',
-            fontSize: '14px',
+            borderRadius: '6px',
+            fontSize: '12px',
             fontWeight: '600',
             cursor: 'pointer'
           }}
@@ -761,12 +756,12 @@ const App: React.FC = () => {
         <button
           onClick={() => setShowAddPhraseForm(!showAddPhraseForm)}
           style={{
-            padding: '16px',
+            padding: '8px 12px',
             backgroundColor: '#3b82f6',
             color: 'white',
             border: 'none',
-            borderRadius: '8px',
-            fontSize: '14px',
+            borderRadius: '6px',
+            fontSize: '12px',
             fontWeight: '600',
             cursor: 'pointer'
           }}
@@ -777,12 +772,12 @@ const App: React.FC = () => {
         <button
           onClick={handleNextPhrase}
           style={{
-            padding: '16px',
+            padding: '8px 12px',
             backgroundColor: '#10b981',
             color: 'white',
             border: 'none',
-            borderRadius: '8px',
-            fontSize: '16px',
+            borderRadius: '6px',
+            fontSize: '12px',
             fontWeight: '600',
             cursor: 'pointer'
           }}
