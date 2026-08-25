@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { useAuth } from '@/hooks/useAuth'
 
 interface LoginScreenProps {
   onLoginSuccess: () => void
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
-  const { login, signup } = useAuth()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,8 +17,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     const users = JSON.parse(localStorage.getItem('speech_swipe_users') || '[]')
     if (users.length === 0) {
       localStorage.setItem('speech_swipe_users', JSON.stringify([
-        { id: '1', email: 'user@test.com', password: 'password', fullName: 'Usuario Demo', role: 'user' },
-        { id: '2', email: 'caregiver@test.com', password: 'password', fullName: 'Cuidador Demo', role: 'caregiver' }
+        { id: '1', email: 'user@test.com', password: 'password', fullName: 'Usuario Demo', role: 'user', linkedCaregiverId: '2' },
+        { id: '2', email: 'caregiver@test.com', password: 'password', fullName: 'Cuidador Demo', role: 'caregiver', linkedPatientIds: ['1'] }
       ]))
     }
   }, [])
@@ -32,13 +30,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       return
     }
     setLoading(true)
-    try {
-      login(email, password)
-      onLoginSuccess()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al iniciar sesión')
+    const users = JSON.parse(localStorage.getItem('speech_swipe_users') || '[]')
+    const user = users.find((u: any) => u.email === email && u.password === password)
+    if (!user) {
+      setError('Email o contraseña incorrectos')
+      setLoading(false)
+      return
     }
+    setError('')
     setLoading(false)
+    onLoginSuccess()
   }
 
   const handleSignup = (e: any) => {
@@ -48,13 +49,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       return
     }
     setLoading(true)
-    try {
-      signup(email, password, fullName, role)
-      onLoginSuccess()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al registrarse')
+    const users = JSON.parse(localStorage.getItem('speech_swipe_users') || '[]')
+    if (users.find((u: any) => u.email === email)) {
+      setError('Este email ya está registrado')
+      setLoading(false)
+      return
     }
+
+    const newId = String(Math.max(...users.map((u: any) => parseInt(u.id)), 0) + 1)
+    const newUser: any = { id: newId, email, password, fullName, role }
+
+    if (role === 'user') {
+      const caregiver = users.find((u: any) => u.role === 'caregiver')
+      if (caregiver) {
+        newUser.linkedCaregiverId = caregiver.id
+        if (!caregiver.linkedPatientIds) caregiver.linkedPatientIds = []
+        caregiver.linkedPatientIds.push(newId)
+      }
+    } else if (role === 'caregiver') {
+      newUser.linkedPatientIds = []
+    }
+
+    users.push(newUser)
+    localStorage.setItem('speech_swipe_users', JSON.stringify(users))
+    setError('')
     setLoading(false)
+    onLoginSuccess()
   }
 
   return (
