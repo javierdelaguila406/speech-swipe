@@ -588,7 +588,7 @@ const App: React.FC = () => {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '40px 20px',
+        padding: '40px 20px 140px 20px',
         overflowY: 'auto'
       }}>
         <div style={{
@@ -714,12 +714,17 @@ const App: React.FC = () => {
       </div>
 
       <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
         backgroundColor: '#374151',
         borderTop: '1px solid #4b5563',
         padding: '20px',
         display: 'grid',
         gridTemplateColumns: '1fr 1fr 1fr 1fr',
-        gap: '12px'
+        gap: '12px',
+        zIndex: 10
       }}>
         <button
           onClick={handlePrevPhrase}
