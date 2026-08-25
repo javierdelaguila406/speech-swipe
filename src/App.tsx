@@ -4,29 +4,33 @@ import { useAuth } from '@/hooks/useAuth'
 import { usePhraseStore } from '@/store/phraseStore'
 
 const PHRASE_IMAGES = [
-  'https://images.pexels.com/photos/3807517/pexels-photo-3807517.jpeg?w=400&h=400&fit=crop',
-  'https://images.pexels.com/photos/3807516/pexels-photo-3807516.jpeg?w=400&h=400&fit=crop',
-  'https://images.pexels.com/photos/3771919/pexels-photo-3771919.jpeg?w=400&h=400&fit=crop',
-  'https://images.pexels.com/photos/3807514/pexels-photo-3807514.jpeg?w=400&h=400&fit=crop',
-  'https://images.pexels.com/photos/3807513/pexels-photo-3807513.jpeg?w=400&h=400&fit=crop',
-  'https://images.pexels.com/photos/3807512/pexels-photo-3807512.jpeg?w=400&h=400&fit=crop',
-  'https://images.pexels.com/photos/5632399/pexels-photo-5632399.jpeg?w=400&h=400&fit=crop',
-  'https://images.pexels.com/photos/5632398/pexels-photo-5632398.jpeg?w=400&h=400&fit=crop',
-  'https://images.pexels.com/photos/5632400/pexels-photo-5632400.jpeg?w=400&h=400&fit=crop',
-  'https://images.pexels.com/photos/5632401/pexels-photo-5632401.jpeg?w=400&h=400&fit=crop'
+  'https://images.pexels.com/photos/3807517/pexels-photo-3807517.jpeg?w=500&h=500&fit=crop',
+  'https://images.pexels.com/photos/3771919/pexels-photo-3771919.jpeg?w=500&h=500&fit=crop',
+  'https://images.pexels.com/photos/3807514/pexels-photo-3807514.jpeg?w=500&h=500&fit=crop',
+  'https://images.pexels.com/photos/3807513/pexels-photo-3807513.jpeg?w=500&h=500&fit=crop',
+  'https://images.pexels.com/photos/5632399/pexels-photo-5632399.jpeg?w=500&h=500&fit=crop',
+  'https://images.pexels.com/photos/5632398/pexels-photo-5632398.jpeg?w=500&h=500&fit=crop',
+  'https://images.pexels.com/photos/5632400/pexels-photo-5632400.jpeg?w=500&h=500&fit=crop',
+  'https://images.pexels.com/photos/5632401/pexels-photo-5632401.jpeg?w=500&h=500&fit=crop',
+  'https://images.pexels.com/photos/3807516/pexels-photo-3807516.jpeg?w=500&h=500&fit=crop',
+  'https://images.pexels.com/photos/3807512/pexels-photo-3807512.jpeg?w=500&h=500&fit=crop'
 ]
 
 function App() {
-  const { user, loading } = useAuth()
-  const { initializePhrases, getCurrentPhrase, nextPhrase, previousPhrase, toggleFavorite, updatePracticeStats, getStats } = usePhraseStore()
+  const { user, loading, logout } = useAuth()
+  const { initializePhrases, getCurrentPhrase, nextPhrase, previousPhrase, toggleFavorite, updatePracticeStats, getStats, phrases } = usePhraseStore()
   const [showPractice, setShowPractice] = useState(false)
+  const [showLips, setShowLips] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [score, setScore] = useState<number | null>(null)
   const [isListening, setIsListening] = useState(false)
+  const [isCaregiverMode, setIsCaregiverMode] = useState(false)
+  const [showAddPhrase, setShowAddPhrase] = useState(false)
+  const [newPhrase, setNewPhrase] = useState('')
+  const [newCategory, setNewCategory] = useState('Saludos')
   const touchStartY = useRef(0)
 
   useEffect(() => {
-    // Crear cuentas de prueba
     const users = JSON.parse(localStorage.getItem('speech_swipe_users') || '[]')
     if (users.length === 0) {
       localStorage.setItem('speech_swipe_users', JSON.stringify([
@@ -37,7 +41,6 @@ function App() {
     initializePhrases()
   }, [initializePhrases])
 
-  // Detectar swipe vertical
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY
   }
@@ -45,31 +48,20 @@ function App() {
   const handleTouchEnd = (e: React.TouchEvent) => {
     const touchEndY = e.changedTouches[0].clientY
     const diff = touchStartY.current - touchEndY
-
     if (Math.abs(diff) > 50) {
-      if (diff > 0) {
-        // Deslizar arriba = siguiente
-        nextPhrase()
-      } else {
-        // Deslizar abajo = anterior
-        previousPhrase()
-      }
+      if (diff > 0) nextPhrase()
+      else previousPhrase()
     }
   }
 
-  if (loading) {
-    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#1f2937', color: 'white' }}>Cargando...</div>
-  }
+  const speakPhrase = (speed: 'normal' | 'slow' = 'normal') => {
+    const phrase = getCurrentPhrase()
+    if (!phrase) return
 
-  if (!user) {
-    return <LoginScreen onLoginSuccess={() => {}} />
-  }
-
-  const phrase = getCurrentPhrase()
-  const stats = getStats()
-
-  if (!phrase) {
-    return <div>Error cargando frases</div>
+    const utterance = new SpeechSynthesisUtterance(phrase.text)
+    utterance.lang = 'es-ES'
+    utterance.rate = speed === 'slow' ? 0.5 : 1
+    speechSynthesis.speak(utterance)
   }
 
   const handlePractice = async () => {
@@ -77,6 +69,9 @@ function App() {
     setTranscript('')
     setScore(null)
     setIsListening(true)
+
+    const phrase = getCurrentPhrase()
+    if (!phrase) return
 
     try {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -93,15 +88,10 @@ function App() {
 
       let finalTranscript = ''
 
-      recognition.onstart = () => {
-        setIsListening(true)
-      }
-
       recognition.onresult = (event: any) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript
           if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' '
+            finalTranscript += event.results[i][0].transcript + ' '
           }
         }
       }
@@ -124,7 +114,6 @@ function App() {
     } catch (error) {
       console.error('Error:', error)
       setIsListening(false)
-      setTranscript('Error al acceder al micrófono')
     }
   }
 
@@ -142,18 +131,108 @@ function App() {
     return Math.round(((longer.length - cost) / longer.length) * 100)
   }
 
+  if (loading) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#1f2937', color: 'white' }}>Cargando...</div>
+  }
+
+  if (!user) {
+    return <LoginScreen onLoginSuccess={() => {}} />
+  }
+
+  // CAREGIVER MODE
+  if (isCaregiverMode && user.role === 'caregiver') {
+    const stats = getStats()
+    return (
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #1f2937, #111827)', color: 'white' }}>
+        <div style={{ background: '#3b82f6', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>👨‍⚕️ Panel Cuidador</h1>
+          <button onClick={() => setIsCaregiverMode(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
+            Volver
+          </button>
+        </div>
+
+        <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>
+          <div style={{ background: '#374151', padding: '24px', borderRadius: '12px', marginBottom: '24px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Seguimiento del Paciente</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+              <div style={{ background: '#1f2937', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ color: '#9ca3af', fontSize: '12px' }}>Total Frases</p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#3b82f6' }}>{stats.totalPhrases}</p>
+              </div>
+              <div style={{ background: '#1f2937', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ color: '#9ca3af', fontSize: '12px' }}>Intentos</p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#10b981' }}>{stats.totalPractices}</p>
+              </div>
+              <div style={{ background: '#1f2937', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ color: '#9ca3af', fontSize: '12px' }}>Puntuación Promedio</p>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#f59e0b' }}>{stats.averageScore}%</p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: '#374151', padding: '24px', borderRadius: '12px', marginBottom: '24px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Agregar Nueva Frase</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <input type="text" value={newPhrase} onChange={(e) => setNewPhrase(e.target.value)} placeholder="Escribe la frase..." style={{ padding: '12px', borderRadius: '8px', border: 'none', fontFamily: 'Arial' }} />
+              <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={{ padding: '12px', borderRadius: '8px', border: 'none', fontFamily: 'Arial' }}>
+                <option>Saludos</option>
+                <option>Necesidades</option>
+                <option>Salud</option>
+                <option>Educación</option>
+                <option>Personal</option>
+              </select>
+              <button onClick={() => { setNewPhrase(''); setNewCategory('Saludos') }} style={{ background: '#3b82f6', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: '600' }}>
+                ➕ Agregar Frase
+              </button>
+            </div>
+          </div>
+
+          <div style={{ background: '#374151', padding: '24px', borderRadius: '12px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Detalle de Frases</h2>
+            {phrases.map((p, idx) => (
+              <div key={idx} style={{ background: '#1f2937', padding: '12px', borderRadius: '8px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontWeight: 'bold' }}>{p.text}</p>
+                  <p style={{ fontSize: '12px', color: '#9ca3af' }}>{p.category} • {p.practiceCount} intentos • {p.bestScore}% mejor</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // USER MODE
+  const phrase = getCurrentPhrase()
+  const stats = getStats()
+
+  if (!phrase) {
+    return <div>Error cargando frases</div>
+  }
+
+  const imageUrl = PHRASE_IMAGES[parseInt(phrase.id) % PHRASE_IMAGES.length]
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #1f2937, #111827)', color: 'white' }}>
-      <style>{`@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } }`}</style>
+      <style>{`@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } } @keyframes slideIn { from { transform: scale(0.8); opacity: 0 } to { transform: scale(1); opacity: 1 } }`}</style>
+
       {/* Header */}
-      <div style={{ background: '#a855f7', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>🎤 Speech Swipe</h1>
-          <p style={{ fontSize: '12px', color: '#e9d5ff' }}>{user.fullName}</p>
+          <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>👤 DILO</h1>
+          <p style={{ fontSize: '12px', color: '#d1fae5' }}>{user.fullName}</p>
         </div>
-        <button onClick={() => { localStorage.removeItem('speech_swipe_user'); window.location.reload() }} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
-          Salir
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {user.role === 'caregiver' && (
+            <button onClick={() => setIsCaregiverMode(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
+              👨‍⚕️ Cuidador
+            </button>
+          )}
+          <button onClick={() => { logout(); window.location.reload() }} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>
+            Salir
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -164,65 +243,82 @@ function App() {
       </div>
 
       {/* Phrase Card */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 16px' }} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', minHeight: 'calc(100vh - 200px)' }} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         {showPractice && (score !== null || isListening) ? (
-          <div style={{ background: 'white', color: 'black', borderRadius: '12px', padding: '32px', maxWidth: '400px', textAlign: 'center', width: '100%' }}>
+          <div style={{ background: 'white', color: 'black', borderRadius: '12px', padding: '32px', maxWidth: '400px', textAlign: 'center', width: '100%', animation: 'slideIn 0.3s ease-out' }}>
             {isListening ? (
               <>
                 <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'pulse 1s infinite' }}>🎤</div>
-                <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#a855f7' }}>Escuchando...</p>
+                <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#10b981' }}>Escuchando...</p>
                 <p style={{ color: '#6b7280', fontSize: '14px', marginTop: '8px' }}>Dile: {phrase.text}</p>
               </>
             ) : score !== null ? (
               <>
-                <div style={{ fontSize: '48px', fontWeight: 'bold', color: '#a855f7', marginBottom: '16px' }}>{score}%</div>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>
+                  {score >= 80 ? '✅' : score >= 60 ? '👍' : score >= 40 ? '📚' : '🔄'}
+                </div>
+                <div style={{ fontSize: '48px', fontWeight: 'bold', color: score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444', marginBottom: '16px' }}>
+                  {score}%
+                </div>
                 <div style={{ background: '#f3f4f6', padding: '16px', borderRadius: '8px', marginBottom: '16px' }}>
                   <p style={{ fontSize: '12px', color: '#6b7280' }}>Dijiste:</p>
                   <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{transcript}</p>
                 </div>
-                {score >= 80 && <p style={{ fontSize: '24px' }}>✨ ¡Excelente!</p>}
-                {score >= 60 && score < 80 && <p style={{ fontSize: '24px' }}>👍 ¡Muy bien!</p>}
-                {score >= 40 && score < 60 && <p style={{ fontSize: '24px' }}>📚 Sigue practicando</p>}
-                {score < 40 && <p style={{ fontSize: '24px' }}>🔄 Intenta de nuevo</p>}
+                {score >= 80 && <p style={{ fontSize: '24px', color: '#10b981', fontWeight: 'bold' }}>¡EXCELENTE! 🎉</p>}
+                {score >= 60 && score < 80 && <p style={{ fontSize: '24px', color: '#f59e0b' }}>¡MUY BIEN! 👏</p>}
+                {score >= 40 && score < 60 && <p style={{ fontSize: '24px' }}>SIGUE PRACTICANDO 💪</p>}
+                {score < 40 && <p style={{ fontSize: '24px' }}>INTENTA DE NUEVO 🎯</p>}
               </>
             ) : null}
-            <button onClick={() => { setShowPractice(false); setScore(null); setTranscript('') }} style={{ width: '100%', background: '#a855f7', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', marginTop: '16px' }}>
+            <button onClick={() => { setShowPractice(false); setScore(null); setTranscript('') }} style={{ width: '100%', background: '#10b981', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', marginTop: '16px' }}>
+              Cerrar
+            </button>
+          </div>
+        ) : showLips ? (
+          <div style={{ background: 'white', color: 'black', borderRadius: '12px', padding: '32px', maxWidth: '400px', textAlign: 'center', width: '100%', animation: 'slideIn 0.3s ease-out' }}>
+            <div style={{ background: '#f3f4f6', padding: '32px', borderRadius: '8px', marginBottom: '16px', fontSize: '72px' }}>
+              👄
+            </div>
+            <h3 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '8px' }}>Observa los Labios</h3>
+            <p style={{ color: '#6b7280', marginBottom: '16px' }}>Mira cómo se pronuncia: {phrase.text}</p>
+            <button onClick={() => speakPhrase('normal')} style={{ width: '100%', background: '#10b981', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', marginBottom: '8px' }}>
+              ▶️ Reproducir
+            </button>
+            <button onClick={() => setShowLips(false)} style={{ width: '100%', background: '#6b7280', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>
               Cerrar
             </button>
           </div>
         ) : (
           <div style={{ background: 'white', color: 'black', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', maxWidth: '400px', width: '100%' }}>
             <div style={{ position: 'relative', width: '100%', paddingBottom: '100%', background: '#e5e7eb', overflow: 'hidden' }}>
-              <img src={PHRASE_IMAGES[parseInt(phrase.id) % PHRASE_IMAGES.length]} alt={phrase.text} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={imageUrl} alt={phrase.text} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
               <button onClick={() => toggleFavorite(phrase.id)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'white', border: 'none', borderRadius: '50%', width: '48px', height: '48px', fontSize: '24px', cursor: 'pointer' }}>
                 {phrase.isFavorite ? '❤️' : '🤍'}
               </button>
-              <div style={{ position: 'absolute', bottom: '16px', left: '16px', background: '#a855f7', color: 'white', padding: '8px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
+              <div style={{ position: 'absolute', bottom: '16px', left: '16px', background: '#10b981', color: 'white', padding: '8px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
                 {phrase.category}
               </div>
             </div>
             <div style={{ padding: '24px', textAlign: 'center' }}>
-              <h2 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px' }}>{phrase.text}</h2>
-              <p style={{ color: '#6b7280', fontSize: '14px' }}>👆 Desliza arriba/abajo para cambiar</p>
+              <h2 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '16px' }}>{phrase.text}</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+                <button onClick={() => speakPhrase('normal')} style={{ background: '#10b981', color: 'white', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>
+                  🔊 Escuchar
+                </button>
+                <button onClick={() => speakPhrase('slow')} style={{ background: '#3b82f6', color: 'white', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>
+                  🐢 Lento
+                </button>
+                <button onClick={() => setShowLips(true)} style={{ background: '#f59e0b', color: 'white', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>
+                  👄 Labios
+                </button>
+                <button onClick={handlePractice} style={{ background: '#a855f7', color: 'white', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>
+                  🎤 Practicar
+                </button>
+              </div>
+              <p style={{ color: '#6b7280', fontSize: '12px' }}>👆 Desliza arriba/abajo para cambiar</p>
             </div>
           </div>
         )}
-      </div>
-
-      {/* Action Bar */}
-      <div style={{ background: '#374151', padding: '24px', display: 'flex', justifyContent: 'space-around', borderTop: '1px solid #4b5563' }}>
-        <button onClick={previousPhrase} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '12px' }}>
-          <div style={{ fontSize: '32px' }}>🔙</div>
-          <p>Anterior</p>
-        </button>
-        <button onClick={handlePractice} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '12px' }}>
-          <div style={{ fontSize: '32px' }}>🎤</div>
-          <p>Practicar</p>
-        </button>
-        <button onClick={nextPhrase} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '12px' }}>
-          <div style={{ fontSize: '32px' }}>▶️</div>
-          <p>Siguiente</p>
-        </button>
       </div>
     </div>
   )
