@@ -564,13 +564,12 @@ const App: React.FC = () => {
 
   return (
     <div style={{
-      height: '100vh',
+      minHeight: '100vh',
       backgroundColor: '#1f2937',
       color: 'white',
-      display: 'grid',
-      gridTemplateRows: 'auto 1fr auto',
-      fontFamily: 'Arial, sans-serif',
-      overflow: 'hidden'
+      display: 'flex',
+      flexDirection: 'column',
+      fontFamily: 'Arial, sans-serif'
     }}>
       <header style={{
         backgroundColor: '#10b981',
@@ -584,6 +583,7 @@ const App: React.FC = () => {
       </header>
 
       <div style={{
+        flex: 1,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
