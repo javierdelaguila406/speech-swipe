@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/common/Button'
 
@@ -10,70 +10,123 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const { login, signup } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showSignup, setShowSignup] = useState(false)
   const [fullName, setFullName] = useState('')
-  const [role, setRole] = useState<'user' | 'caregiver'>('user')
+  const [role, setRole] = useState('user')
+  const [showSignup, setShowSignup] = useState(false)
   const [error, setError] = useState('')
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Crear cuentas de prueba
+  useEffect(() => {
+    const users = JSON.parse(localStorage.getItem('speech_swipe_users') || '[]')
+    if (users.length === 0) {
+      localStorage.setItem('speech_swipe_users', JSON.stringify([
+        { id: '1', email: 'user@test.com', password: 'password', fullName: 'Usuario Demo', role: 'user' },
+        { id: '2', email: 'caregiver@test.com', password: 'password', fullName: 'Cuidador Demo', role: 'caregiver' }
+      ]))
+    }
+  }, [])
+
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setError('')
     try {
       login(email, password)
+      setEmail('')
+      setPassword('')
       onLoginSuccess()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al iniciar sesión')
+      setError(err instanceof Error ? err.message : 'Error')
     }
   }
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setError('')
     try {
-      signup(email, password, fullName, role)
+      signup(email, password, fullName, role as 'user' | 'caregiver')
+      setEmail('')
+      setPassword('')
+      setFullName('')
       onLoginSuccess()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al registrarse')
+      setError(err instanceof Error ? err.message : 'Error')
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center mb-2 text-purple-600">🎤 Speech Swipe</h1>
-        <p className="text-center text-gray-600 mb-8">Rehabilitación del habla</p>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #9333ea, #6b21a8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ background: 'white', borderRadius: '8px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', padding: '32px', width: '100%', maxWidth: '448px' }}>
+        <h1 style={{ fontSize: '30px', fontWeight: 'bold', textAlign: 'center', marginBottom: '8px', color: '#a855f7' }}>
+          🎤 Speech Swipe
+        </h1>
+        <p style={{ textAlign: 'center', color: '#4b5563', marginBottom: '32px' }}>Rehabilitación del habla</p>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', padding: '12px', borderRadius: '4px', marginBottom: '16px' }}>
             {error}
           </div>
         )}
 
         {!showSignup ? (
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                Email
+              </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="tu@email.com"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                style={{
+                  width: '100%',
+                  padding: '8px 16px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  boxSizing: 'border-box',
+                  fontSize: '16px'
+                }}
                 required
               />
             </div>
+
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Contraseña</label>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                Contraseña
+              </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                style={{
+                  width: '100%',
+                  padding: '8px 16px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  boxSizing: 'border-box',
+                  fontSize: '16px'
+                }}
                 required
               />
             </div>
-            <Button type="submit" className="w-full">
+
+            <button
+              type="submit"
+              style={{
+                width: '100%',
+                background: '#a855f7',
+                color: 'white',
+                padding: '12px',
+                borderRadius: '8px',
+                border: 'none',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
               Iniciar Sesión
-            </Button>
+            </button>
 
             <button
               type="button"
@@ -81,61 +134,121 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 setShowSignup(true)
                 setError('')
               }}
-              className="w-full text-purple-600 hover:text-purple-800 font-semibold"
+              style={{
+                width: '100%',
+                color: '#a855f7',
+                background: 'none',
+                border: 'none',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
             >
               ¿No tienes cuenta? Regístrate
             </button>
           </form>
         ) : (
-          <form onSubmit={handleSignup} className="space-y-4">
+          <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre Completo</label>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                Nombre
+              </label>
               <input
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Tu nombre"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                style={{
+                  width: '100%',
+                  padding: '8px 16px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  boxSizing: 'border-box',
+                  fontSize: '16px'
+                }}
                 required
               />
             </div>
+
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                Email
+              </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="tu@email.com"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                style={{
+                  width: '100%',
+                  padding: '8px 16px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  boxSizing: 'border-box',
+                  fontSize: '16px'
+                }}
                 required
               />
             </div>
+
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Contraseña</label>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                Contraseña
+              </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                style={{
+                  width: '100%',
+                  padding: '8px 16px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  boxSizing: 'border-box',
+                  fontSize: '16px'
+                }}
                 required
               />
             </div>
+
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Rol</label>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                Rol
+              </label>
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value as 'user' | 'caregiver')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                onChange={(e) => setRole(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 16px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  boxSizing: 'border-box',
+                  fontSize: '16px'
+                }}
               >
-                <option value="user">Paciente/Usuario</option>
-                <option value="caregiver">Cuidador/Terapeuta</option>
+                <option value="user">Paciente</option>
+                <option value="caregiver">Cuidador</option>
               </select>
             </div>
 
-            <Button type="submit" className="w-full">
+            <button
+              type="submit"
+              style={{
+                width: '100%',
+                background: '#a855f7',
+                color: 'white',
+                padding: '12px',
+                borderRadius: '8px',
+                border: 'none',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
               Registrarse
-            </Button>
+            </button>
 
             <button
               type="button"
@@ -143,18 +256,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 setShowSignup(false)
                 setError('')
               }}
-              className="w-full text-purple-600 hover:text-purple-800 font-semibold"
+              style={{
+                width: '100%',
+                color: '#a855f7',
+                background: 'none',
+                border: 'none',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
             >
               ¿Ya tienes cuenta? Inicia sesión
             </button>
           </form>
         )}
 
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-xs text-gray-600 text-center mb-2">Cuentas de prueba:</p>
-          <div className="text-xs text-gray-600 space-y-1">
-            <p>👤 Usuario: user@test.com / password</p>
-            <p>👨‍⚕️ Cuidador: caregiver@test.com / password</p>
+        <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #e5e7eb' }}>
+          <p style={{ fontSize: '12px', color: '#4b5563', textAlign: 'center', marginBottom: '8px' }}>Cuentas de prueba:</p>
+          <div style={{ fontSize: '12px', color: '#4b5563', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <p>👤 user@test.com / password</p>
+            <p>👨‍⚕️ caregiver@test.com / password</p>
           </div>
         </div>
       </div>
