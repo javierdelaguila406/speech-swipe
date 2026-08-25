@@ -712,7 +712,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <footer style={{
+      <div style={{
         backgroundColor: '#374151',
         borderTop: '1px solid #4b5563',
         padding: '20px',
@@ -783,7 +783,7 @@ const App: React.FC = () => {
         >
           Siguiente ➜
         </button>
-      </footer>
+      </div>
 
       {showLipsModal && (
         <RealisticLipsModal
